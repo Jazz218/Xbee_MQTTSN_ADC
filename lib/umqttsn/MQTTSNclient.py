@@ -1,25 +1,7 @@
-"""
-/*******************************************************************************
- * Copyright (c) 2011, 2013 IBM Corp.
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * and Eclipse Distribution License v1.0 which accompany this distribution. 
- *
- * The Eclipse Public License is available at 
- *    http://www.eclipse.org/legal/epl-v10.html
- * and the Eclipse Distribution License is available at 
- *   http://www.eclipse.org/org/documents/edl-v10.php.
- *
- * Contributors:
- *    Ian Craggs - initial API and implementation and/or initial documentation
- *    EH Ong - port to Python 3 and Micropython
- *******************************************************************************/
-"""
-
 from umqttsn import MQTTSN, MQTTSNinternal
-import socket, _thread, struct, queue, xbee
-
+import xbee
+#import _thread
+#import queue
 
 class Callback:
 
@@ -50,26 +32,17 @@ class TopicMap:
 
 class Client:
 
-  def __init__(self, clientid, host="localhost", port=1883):
+  def __init__(self, clientid):
     self.clientid = clientid
-    self.host = host
-    self.port = port
     self.msgid = 1
     self.callback = None
     self.__receiver = None
     self.topicmap = TopicMap()
-    self.queue = queue.Queue()
-        
-  def start(self):
-    self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self.sock.bind((self.host, self.port))
-    mreq = struct.pack("4sl", socket.inet_aton(self.host), socket.INADDR_ANY)
+    # self.Deck = Deck.()
 
-    self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-    
+  def start(self):
     self.startReceiver()
-      
+
   def stop(self):
     self.stopReceiver()
 
@@ -100,17 +73,16 @@ class Client:
     connect.CleanSession = cleansession
     connect.KeepAliveTimer = 0
     xbee.transmit(connect.pack())
-
     response, address = MQTTSN.unpackPacket(MQTTSN.getPacket(self.sock))
     assert response.mh.MsgType == MQTTSN.CONNACK
-    
     self.startReceiver()
 
-    
+
   def startReceiver(self):
     self.__receiver = MQTTSNinternal.Receivers(self.sock)
     if self.callback:
-      id = _thread.start_new_thread(self.__receiver, (self.callback,self.topicmap,self.queue,))
+      return
+     #id = _thread.start_new_thread(self.__receiver, (self.callback,self.topicmap,self.queue,))
 
 
   def waitfor(self, msgType, msgId=None):
@@ -138,7 +110,7 @@ class Client:
     subscribe.Flags.QoS = qos
     if self.__receiver:
       self.__receiver.lookfor(MQTTSN.SUBACK)
-    self.sock.send(subscribe.pack())
+      self.xbee.transmit(subscribe.pack())
     msg = self.waitfor(MQTTSN.SUBACK, subscribe.MsgId)
     self.topicmap.register(msg.TopicId, topic)
     return msg.ReturnCode, msg.TopicId
@@ -150,16 +122,16 @@ class Client:
     unsubscribe.data = topics
     if self.__receiver:
       self.__receiver.lookfor(MQTTSN.UNSUBACK)
-    self.sock.send(unsubscribe.pack())
+      self.xbee.transmit(unsubscribe.pack())
     msg = self.waitfor(MQTTSN.UNSUBACK, unsubscribe.MsgId)
-  
-  
+
+
   def register(self, topicName):
     register = MQTTSN.Registers()
     register.TopicName = topicName
     if self.__receiver:
       self.__receiver.lookfor(MQTTSN.REGACK)
-    self.sock.send(register.pack())
+      self.xbee.transmit(register.pack())
     msg = self.waitfor(MQTTSN.REGACK, register.MsgId)
     self.topicmap.register(msg.TopicId, topicName)
     return msg.TopicId
@@ -186,24 +158,22 @@ class Client:
       #print("MsgId", publish.MsgId)
       self.__receiver.outMsgs[publish.MsgId] = publish
     publish.Data = payload
-    self.sock.send(publish.pack())
     return publish.MsgId
-  
+
 
   def disconnect(self):
     disconnect = MQTTSN.Disconnects()
     if self.__receiver:
       self.__receiver.lookfor(MQTTSN.DISCONNECT)
-    self.sock.send(disconnect.pack())
     msg = self.waitfor(MQTTSN.DISCONNECT)
     self.stopReceiver()
-    
+
 
   def stopReceiver(self):
-    self.sock.close() # this will stop the receiver too
-##    assert self.__receiver.inMsgs == {}
-##    assert self.__receiver.outMsgs == {}
-    self.__receiver = None
+
+     assert self.__receiver.inMsgs == {}
+     assert self.__receiver.outMsgs == {}
+     self.__receiver = None
 
   def receive(self):
     return self.__receiver.receive()
@@ -231,9 +201,7 @@ def publish(topic, payload, retained=False, port=1883, host="localhost"):
   publish.MsgId = 0
   #print("payload", payload)
   publish.Data = payload
-  sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-  sock.sendto(publish.pack(), (host, port))
-  sock.close()
+
   return 
 
 
@@ -286,6 +254,3 @@ if __name__ == "__main__":
 	aclient.publish(topic2, "bbbb", qos=0)
 	aclient.publish(topic1, "aaaa", qos=0)
 	aclient.disconnect()
-
-
-
