@@ -1,23 +1,25 @@
-import umqttsn.MQTTSNclient
-from machine import ADC
 import struct
 import sys
 import time
 import xbee
 import micropython
+import umqttsn.MQTTSNclient
+from machine import ADC
 
 class Callback:
     def published(self, MsgId):
         print("Published")
 
 def connect_gateway():
+
     try:
         while True:
             try:
                 aclient.connect()
                 print('Connected to gateway...')
                 break
-            except:
+            except Exception as e:
+                print(e)
                 print('Failed to connect to gateway, reconnecting...')
                 time.sleep(1)
     except KeyboardInterrupt:
@@ -33,7 +35,8 @@ def register_topic():
     topic3 = aclient.register("topic3")
     print("topic3 registered.")
 
-aclient = umqttsn.MQTTSNclient.Client("client_sn_pub")
+xbee.idle_radio(False)
+aclient = umqttsn.MQTTSNclient.Client("1234")
 aclient.registerCallback(Callback())
 print("trying to connect to gateway")
 connect_gateway()
@@ -70,13 +73,3 @@ while(1):
     time.sleep(2)
     xbee.transmit(xbee.ADDR_BROADCAST, adc0_string)
     x = x+1
-
-    # print("ADC1 value is: %d" % adc1_value)
-    # print("ADC2 value is: %d" % adc2_value)
-    # print("ADC3 value is: %d" % adc3_value)
-    # adc1_value = adc1.read() # pin 30
-    # adc2_value = adc2.read() # pin 29
-    # adc3_value = adc3.read() # pin 28
-    # adc1 = ADC("D1")
-    # adc2 = ADC("D2")
-    # adc3 = ADC("D3")

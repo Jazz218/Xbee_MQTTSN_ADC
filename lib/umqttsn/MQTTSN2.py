@@ -1,7 +1,11 @@
+from umqttsn import MQTTSN
+from umqttsn.MQTTSNBase import Packets
 import struct
-import MQTTSN
-# Low-level protocol interface for MQTTs
+
+# class Packets, class Advertises, class SearchGWs, class GWinfo, class Connects, class Connacks, class WillTopicReqs
+# class WillTopics, class WillMsgReqs, class WillMsgs
 # Message types
+
 ADVERTISE, SEARCHGW, GWINFO, reserved, \
 CONNECT, CONNACK, \
 WILLTOPICREQ, WILLTOPIC, WILLMSGREQ, WILLMSG, \
@@ -20,372 +24,194 @@ packetNames = [ "ADVERTISE", "SEARCHGW", "GWINFO", "reserved",
 "PINGREQ", "PINGRESP", "DISCONNECT", "reserved",
 "WILLTOPICUPD", "WILLTOPICRESP", "WILLMSGUPD", "WILLMSGRESP"]
 
-TopicIdType_Names = ["NORMAL", "PREDEFINED", "SHORT_NAME"]
-TOPIC_NORMAL, TOPIC_PREDEFINED, TOPIC_SHORTNAME = range(3)
+class MessageHeaders:
 
+  def __init__(self, aMsgType):
+    self.Length = 0
+    self.MsgType = aMsgType
 
-class Pubacks(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(PUBACK)
-    self.TopicId = 0
-    self.MsgId = 0
-    self.ReturnCode = 0 # 1 byte
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    buffer = MQTTSN.writeInt16(self.TopicId) + MQTTSN.writeInt16(self.MsgId) + struct.pack('>B', self.ReturnCode)
-    return self.mh.pack(len(buffer)) + buffer
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == PUBACK
-    self.TopicId = MQTTSN.readInt16(buffer[pos:])
-    pos += 2
-    self.MsgId = MQTTSN.readInt16(buffer[pos:])
-    pos += 2
-    self.ReturnCode = buffer[pos]
+  def __eq__(self, mh):
+    return self.Length == mh.Length and self.MsgType == mh.MsgType
 
   def __str__(self):
-    return str(self.mh)+", TopicId "+str(self.TopicId)+" , MsgId "+str(self.MsgId)+", ReturnCode "+str(self.ReturnCode)
+    "return printable stresentation of our data"
+    return "Length " + str(self.Length) + ", " + packetNames[self.MsgType]
 
-  def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and \
-           self.TopicId == packet.TopicId and \
-           self.MsgId == packet.MsgId and \
-           self.ReturnCode == packet.ReturnCode
-
-
-class Pubrecs(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(PUBREC)
-    self.MsgId = 0
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    return self.mh.pack(2) + MQTTSN.writeInt16(self.MsgId)
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == PUBREC
-    self.MsgId = MQTTSN.readInt16(buffer[pos:])
-
-  def __str__(self):
-    return str(self.mh)+" , MsgId "+str(self.MsgId)
-
-  def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and self.MsgId == packet.MsgId
-
-class Pubrels(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(PUBREL)
-    self.MsgId = 0
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    return self.mh.pack(2) + MQTTSN.writeInt16(self.MsgId)
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == PUBREL
-    self.MsgId = MQTTSN.readInt16(buffer[pos:])
-
-  def __str__(self):
-    return str(self.mh)+" , MsgId "+str(self.MsgId)
-
-  def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and self.MsgId == packet.MsgId
-
-
-class Pubcomps(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(PUBCOMP)
-    self.MsgId = 0
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    return self.mh.pack(2) + MQTTSN.writeInt16(self.MsgId)
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == PUBCOMP
-    self.MsgId = (buffer[pos:])
-
-  def __str__(self):
-    return str(self.mh)+" , MsgId "+str(self.MsgId)
-
-  def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and self.MsgId == packet.MsgId
-
-
-class Subscribes(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(SUBSCRIBE)
-    self.Flags = MQTTSN.Flags()
-    self.MsgId = 0 # 2 bytes
-    self.TopicId = 0 # 2 bytes
-    self.TopicName = ""
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    buffer = self.Flags.pack() + MQTTSN.writeInt16(self.MsgId)
-    if self.Flags.TopicIdType == TOPIC_PREDEFINED:
-      buffer += MQTTSN.writeInt16(self.TopicId)
-    elif self.Flags.TopicIdType in [TOPIC_NORMAL, TOPIC_SHORTNAME]:
-      self.TopicName = str(self.TopicName).encode()
-      fmt = '>%ds' % len(self.TopicName)
-      buffer += struct.pack(fmt, self.TopicName)
-    return self.mh.pack(len(buffer)) + buffer
-
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == SUBSCRIBE
-    pos += self.Flags.unpack(buffer[pos:])
-    self.MsgId = MQTTSN.readInt16(buffer[pos:])
-    pos += 2
-    self.TopicId = 0
-    self.TopicName = ""
-    if self.Flags.TopicIdType == TOPIC_PREDEFINED:
-      self.TopicId = MQTTSN.readInt16(buffer[pos:])
-    elif self.Flags.TopicIdType in [TOPIC_NORMAL, TOPIC_SHORTNAME]:
-      self.TopicName = buffer[pos:pos+2]
-
-  def __str__(self):
-    buffer = str(self.mh)+", Flags "+str(self.Flags)+", MsgId "+str(self.MsgId)
-    if self.Flags.TopicIdType == 0:
-      buffer += ", TopicName "+str(self.TopicName)
-    elif self.Flags.TopicIdType == 1:
-      buffer += ", TopicId "+str(self.TopicId)
-    elif self.Flags.TopicIdType == 2:
-      buffer += ", TopicId "+str(self.TopicId)
+  def pack(self, length):
+    "pack data into string buffer ready for transmission down socket"
+    # length does not yet include the length or msgtype bytes we are going to add
+    buffer = self.encode(length) + struct.pack('>B', self.MsgType)
     return buffer
 
-  def __eq__(self, packet):
-    if self.Flags.TopicIdType == 0:
-      if packet == None:
-        rc = False
-      else:
-        rc = self.TopicName == packet.TopicName
+  def encode(self, length):
+    self.Length = length + 2
+    assert 2 <= self.Length <= 65535
+    if self.Length < 256:
+      buffer = struct.pack('>B', self.Length)
+      # print("length", self.Length)
     else:
-      if packet == None:
-        rc = False
-      else:
-        rc = self.TopicId == packet.TopicId
-    return MQTTSN.Packets.__eq__(self, packet) and \
-         self.Flags == packet.Flags and \
-         self.MsgId == packet.MsgId and rc
-
-
-class Subacks(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(SUBACK)
-    self.Flags = MQTTSN.Flags() # 1 byte
-    self.TopicId = 0 # 2 bytes
-    self.MsgId = 0 # 2 bytes
-    self.ReturnCode = 0 # 1 byte
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    buffer = self.Flags.pack() + MQTTSN.writeInt16(self.TopicId) + MQTTSN.writeInt16(self.MsgId) + struct.pack('>B', self.ReturnCode)
-    return self.mh.pack(len(buffer)) + buffer
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == SUBACK
-    pos += self.Flags.unpack(buffer[pos:])
-    self.TopicId = MQTTSN.readInt16(buffer[pos:])
-    pos += 2
-    self.MsgId = MQTTSN.readInt16(buffer[pos:])
-    pos += 2
-    self.ReturnCode = buffer[pos]
-
-  def __str__(self):
-    return str(self.mh)+", Flags "+str(self.Flags)+", TopicId "+str(self.TopicId)+" , MsgId "+str(self.MsgId)+", ReturnCode "+str(self.ReturnCode)
-
-  def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and \
-           self.Flags == packet.Flags and \
-           self.TopicId == packet.TopicId and \
-           self.MsgId == packet.MsgId and \
-           self.ReturnCode == packet.ReturnCode
-
-
-class Unsubscribes(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(UNSUBSCRIBE)
-    self.Flags = MQTTSN.Flags()
-    self.MsgId = 0 # 2 bytes
-    self.TopicId = 0 # 2 bytes
-    self.TopicName = ""
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    buffer = self.Flags.pack() + MQTTSN.writeInt16(self.MsgId)
-    if self.Flags.TopicIdType == 0:
-      self.TopicName = str(self.TopicName).encode()
-      fmt = '>%ds' % len(self.TopicName)
-      buffer += struct.pack(fmt, self.TopicName)
-    elif self.Flags.TopicIdType == 1:
-      buffer += MQTTSN.writeInt16(self.TopicId)
-    elif self.Flags.TopicIdType == 2:
-      self.TopicId = str(self.TopicId).encode()
-      fmt = '>%ds' % len(self.TopicId)
-      buffer += struct.pack(fmt, self.TopicId)
-    return self.mh.pack(len(buffer)) + buffer
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == UNSUBSCRIBE
-    pos += self.Flags.unpack(buffer[pos:])
-    self.MsgId = MQTTSN.readInt16(buffer[pos:])
-    pos += 2
-    self.TopicId = 0
-    self.TopicName = ""
-    if self.Flags.TopicIdType == 0:
-      self.TopicName = buffer[pos:self.mh.Length]
-    elif self.Flags.TopicIdType == 1:
-      self.TopicId = MQTTSN.readInt16(buffer[pos:])
-    elif self.Flags.TopicIdType == 3:
-      self.TopicId = buffer[pos:pos+2]
-
-  def __str__(self):
-    buffer = str(self.mh)+", Flags "+str(self.Flags)+", MsgId "+str(self.MsgId)
-    if self.Flags.TopicIdType == 0:
-      buffer += ", TopicName "+str(self.TopicName)
-    elif self.Flags.TopicIdType == 1:
-      buffer += ", TopicId "+str(self.TopicId)
-    elif self.Flags.TopicIdType == 2:
-      buffer += ", TopicId "+str(self.TopicId)
+      self.Length += 2
+      buffer = struct.pack('>B', 1) + MQTTSN.writeInt16(self.Length)
     return buffer
 
-  def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and \
-         self.Flags == packet.Flags and \
-         self.MsgId == packet.MsgId and \
-         self.TopicId == packet.TopicId and \
-         self.TopicName == packet.TopicName
+  def unpack(self, buffer):
+    "unpack data from string buffer into separate fields"
+    (self.Length, bytes) = self.decode(buffer)
+    self.MsgType = buffer[bytes]
+    return bytes + 1
 
-class Unsubacks(MQTTSN.Packets):
+  def decode(self, buffer):
+    value = buffer[0]
+    if value > 1:
+      bytes = 1
+    else:
+      value = MQTTSN.readInt16(buffer[1:])
+      bytes = 3
+    return (value, bytes)
 
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(UNSUBACK)
-    self.MsgId = 0
-    if buffer != None:
+  def writeUTF(aString):
+    aString = str(aString).encode()
+    fmt = '>%ds' % len(aString)
+    return MQTTSN.writeInt16(len(aString)) + struct.pack(fmt, aString)
+
+  def readUTF(buffer):
+    length = MQTTSN.readInt16(buffer)
+    return buffer[2:2 + length]
+
+
+class Advertises(Packets):
+
+  def __init__(self, buffer=None):
+    self.mh = MessageHeaders(MQTTSN.ADVERTISE)
+    self.GwId = 0     # 1 byte
+    self.Duration = 0 # 2 bytes
+    if buffer:
       self.unpack(buffer)
 
   def pack(self):
-    return self.mh.pack(2) + MQTTSN.writeInt16(self.MsgId)
+    buffer = struct.pack('>B', self.GwId) + MQTTSN.writeInt16(self.Duration)
+    return self.mh.pack(len(buffer)) + buffer
 
   def unpack(self, buffer):
     pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == UNSUBACK
-    self.MsgId = MQTTSN.readInt16(buffer[pos:])
+    assert self.mh.MsgType == MQTTSN.ADVERTISE
+    self.GwId = buffer[pos]
+    pos += 1
+    self.Duration = MQTTSN.readInt16(buffer[pos:])
 
   def __str__(self):
-    return str(self.mh)+" , MsgId "+str(self.MsgId)
+    return str(self.mh) + " GwId "+str(self.GwId)+" Duration "+str(self.Duration)
 
   def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and self.MsgId == packet.MsgId
-
-
-class Pingreqs(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(PINGREQ)
-    self.ClientId = None
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    if self.ClientId:
-      self.ClientId = str(self.ClientId).encode()
-      fmt = '>%ds' % len(self.ClientId)
-      buf = self.mh.pack(len(self.ClientId)) + struct.pack(fmt, self.ClientId)
-    else:
-      buf = self.mh.pack(0)
-    return buf
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == PINGREQ
-    self.ClientId = buffer[pos:self.mh.Length]
-    if self.ClientId == b'':
-      self.ClientId = None
-
-  def __str__(self):
-    buf = str(self.mh)
-    if self.ClientId:
-      buf += ", ClientId "+str(self.ClientId)
-    return buf
-
-  def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and \
-           self.ClientId == packet.ClientId
-
-
-class Pingresps(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(PINGRESP)
-    if buffer != None:
-      self.unpack(buffer)
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == PINGRESP
-
-class Disconnects(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(DISCONNECT)
-    self.Duration = None
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    if self.Duration:
-      buf = self.mh.pack(2) + MQTTSN.writeInt16(self.Duration)
-    else:
-      buf = self.mh.pack(0)
-    return buf
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == DISCONNECT
-    buf = buffer[pos:self.mh.Length]
-    if buf == b'':
-      self.Duration = None
-    else:
-      self.Duration = MQTTSN.readInt16(buffer[pos:])
-
-  def __str__(self):
-    buf = str(self.mh)
-    if self.Duration:
-      buf += ", Duration "+str(self.Duration)
-    return buf
-
-  def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and \
+    return Packets.__eq__(self, packet) and \
+           self.GwId == packet.GwId and \
            self.Duration == packet.Duration
 
-class WillTopicUpds(MQTTSN.Packets):
+
+class GWInfos(Packets):
+
+  def __init__(self, buffer=None):
+    self.mh = MessageHeaders(MQTTSN.GWINFO)
+    self.GwId = 0  # 1 byte
+    self.GwAdd = None # optional
+    if buffer:
+      self.unpack(buffer)
+
+  def pack(self):
+    buffer = struct.pack('>B', self.GwId)
+    if self.GwAdd:
+      self.GwAdd = str(self.GwAdd).encode()
+      fmt = '>%ds' % len(self.GwAdd)
+      buffer += struct.pack(fmt, self.GwAdd)
+    buffer = self.mh.pack(len(buffer)) + buffer
+    return buffer
+
+  def unpack(self, buffer):
+    pos = self.mh.unpack(buffer)
+    assert self.mh.MsgType == MQTTSN.GWINFO
+    self.GwId = buffer[pos]
+    pos += 1
+    if pos >= self.mh.Length:
+      self.GwAdd = None
+    else:
+      self.GwAdd = buffer[pos:]
+
+  def __str__(self):
+    buf = str(self.mh) + " Radius "+str(self.GwId)
+    if self.GwAdd:
+      buf += " GwAdd "+self.GwAdd
+    return buf
+
+class Connects(Packets):
+
+  def __init__(self, buffer=None):
+    self.mh = MessageHeaders(MQTTSN.CONNECT)
+    self.Flags = MQTTSN.Flags()
+    self.ProtocolId = 1
+    self.Duration = 30
+    self.ClientId = ""
+    if buffer!=None:
+      self.unpack(buffer)
+
+  def pack(self):
+    self.ClientId = str(self.ClientId).encode()
+    fmt = '>%ds' % len(self.ClientId)
+    header = str(0)
+    buffer = self.Flags.pack() + struct.pack('>B', self.ProtocolId) + MQTTSN.writeInt16(self.Duration) + struct.pack(fmt,self.ClientId)
+    return self.mh.pack(len(buffer)) + buffer
+
+  def unpack(self, buffer):
+    pos = self.mh.unpack(buffer)
+    assert self.mh.MsgType == CONNECT
+    pos += self.Flags.unpack([buffer[pos]])
+    self.ProtocolId = buffer[pos]
+    pos += 1
+    self.Duration = MQTTSN.readInt16(buffer[pos:])
+    pos += 2
+    self.ClientId = buffer[pos:]
+
+
+class Connacks(Packets):
 
   def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(WILLTOPICUPD)
+    self.mh = MessageHeaders(CONNACK)
+    self.ReturnCode = 0 # 1 byte
+    if buffer != None:
+      self.unpack(buffer)
+
+  def pack(self):
+    buffer = struct.pack('>B', self.ReturnCode)
+    return self.mh.pack(len(buffer)) + buffer
+
+  def unpack(self, buffer):
+    pos = self.mh.unpack(buffer)
+    assert self.mh.MsgType == CONNACK
+    self.ReturnCode = buffer[pos]
+
+  def __str__(self):
+    return str(self.mh)+", ReturnCode "+str(self.ReturnCode)
+
+  def __eq__(self, packet):
+    return Packets.__eq__(self, packet) and \
+           self.ReturnCode == packet.ReturnCode
+
+
+class WillTopicReqs(Packets):
+
+  def __init__(self, buffer = None):
+    self.mh = MessageHeaders(WILLTOPICREQ)
+    if buffer != None:
+      self.unpack(buffer)
+
+  def unpack(self, buffer):
+    pos = self.mh.unpack(buffer)
+    assert self.mh.MsgType == (WILLTOPICREQ)
+
+
+class WillTopics(Packets):
+
+  def __init__(self, buffer = None):
+    self.mh = MessageHeaders(WILLTOPIC)
     self.flags = MQTTSN.Flags()
     self.WillTopic = ""
     if buffer != None:
@@ -399,7 +225,7 @@ class WillTopicUpds(MQTTSN.Packets):
 
   def unpack(self, buffer):
     pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == WILLTOPICUPD
+    assert self.mh.MsgType == WILLTOPIC
     pos += self.flags.unpack(buffer[pos:])
     self.WillTopic = buffer[pos:self.mh.Length]
 
@@ -407,14 +233,26 @@ class WillTopicUpds(MQTTSN.Packets):
     return str(self.mh)+", Flags "+str(self.flags)+", WillTopic "+str(self.WillTopic)
 
   def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and \
+    return Packets.__eq__(self, packet) and \
            self.flags == packet.flags and \
            self.WillTopic == packet.WillTopic
 
-class WillMsgUpds(MQTTSN.Packets):
+class WillMsgReqs(Packets):
 
   def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(WILLMSGUPD)
+    self.mh = MessageHeaders(WILLMSGREQ)
+    if buffer != None:
+      self.unpack(buffer)
+
+  def unpack(self, buffer):
+    pos = self.mh.unpack(buffer)
+    assert self.mh.MsgType == WILLMSGREQ
+
+
+class WillMsgs(Packets):
+
+  def __init__(self, buffer = None):
+    self.mh = MessageHeaders(WILLMSG)
     self.WillMsg = ""
     if buffer != None:
       self.unpack(buffer)
@@ -426,97 +264,12 @@ class WillMsgUpds(MQTTSN.Packets):
 
   def unpack(self, buffer):
     pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == WILLMSGUPD
+    assert self.mh.MsgType == WILLMSG
     self.WillMsg = buffer[pos:self.mh.Length]
 
   def __str__(self):
     return str(self.mh)+", WillMsg "+str(self.WillMsg)
 
   def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and \
+    return Packets.__eq__(self, packet) and \
            self.WillMsg == packet.WillMsg
-
-class WillTopicResps(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(WILLTOPICRESP)
-    self.ReturnCode = 0
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    buffer = MQTTSN.writeInt16(self.ReturnCode)
-    return self.mh.pack(len(buffer)) + buffer
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == WILLTOPICRESP
-    self.ReturnCode = MQTTSN.readInt16(buffer[pos:])
-
-  def __str__(self):
-    return str(self.mh)+", ReturnCode "+str(self.ReturnCode)
-
-  def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and \
-           self.ReturnCode == packet.ReturnCode
-
-class WillMsgResps(MQTTSN.Packets):
-
-  def __init__(self, buffer = None):
-    self.mh = MQTTSN.MessageHeaders(WILLMSGRESP)
-    self.ReturnCode = 0
-    if buffer != None:
-      self.unpack(buffer)
-
-  def pack(self):
-    buffer = MQTTSN.writeInt16(self.ReturnCode)
-    return self.mh.pack(len(buffer)) + buffer
-
-  def unpack(self, buffer):
-    pos = self.mh.unpack(buffer)
-    assert self.mh.MsgType == WILLMSGRESP
-    self.returnCode = MQTTSN.readInt16(buffer[pos:])
-
-  def __str__(self):
-    return str(self.mh)+", ReturnCode "+str(self.ReturnCode)
-
-  def __eq__(self, packet):
-    return MQTTSN.Packets.__eq__(self, packet) and \
-           self.ReturnCode == packet.ReturnCode
-
-objects = [MQTTSN.Advertises, MQTTSN.SearchGWs, MQTTSN.GWInfos, None,
-           MQTTSN.Connects, MQTTSN.Connacks,
-           MQTTSN.WillTopicReqs, MQTTSN.WillTopics, MQTTSN.WillMsgReqs, MQTTSN.WillMsgs,
-           MQTTSN.Registers, MQTTSN.Regacks,
-           MQTTSN.Publishes, Pubacks, Pubcomps, Pubrecs, Pubrels, None,
-           Subscribes, Subacks, Unsubscribes, Unsubacks,
-           Pingreqs, Pingresps, Disconnects, None,
-           WillTopicUpds, WillTopicResps, WillMsgUpds, WillMsgResps]
-
-def unpackPacket(msg):
-  (buffer, address) = msg
-  if MQTTSN.MessageType(buffer) != None:
-    packet = objects[MQTTSN.MessageType(buffer)]()
-    packet.unpack(buffer)
-  else:
-    packet = None
-  return packet, address
-
-if __name__ == "__main__":
-  print("Object string representations")
-  for o in objects:
-    if o:
-      print(o())
-
-  print("\nComparisons")
-  for o in [MQTTSN.Flags] + objects:
-    if o:
-      o1 = o()
-      o2 = o()
-      o2.unpack(o1.pack())
-      if o1 != o2:
-        print("error! ", str(o1.mh) if hasattr(o1, "mh") else o1.__class__.__name__)
-        print(str(o1))
-        print(str(o2))
-      else:
-        print("ok ", str(o1.mh) if hasattr(o1, "mh") else o1.__class__.__name__)
