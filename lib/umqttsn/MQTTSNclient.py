@@ -73,10 +73,10 @@ class Client:
     connect.KeepAliveTimer = 0
     pack = connect.pack()
     print('Pack: {} {}'.format(pack, str(pack)))
-    try:
-      xbee.transmit(xbee.ADDR_BROADCAST, pack)
-    except Exception as e:
-      print(e)
+    # try:
+    #   xbee.transmit(xbee.ADDR_BROADCAST, pack)
+    # except Exception as e:
+    #   print(e)
     response = MQTTSN4.unpackPacket(MQTTSN.getPacket()) #self.sock
     print('2')
     assert response.mh.MsgType == MQTTSN.CONNACK
